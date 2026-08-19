@@ -1,0 +1,795 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0d0812">
+<title>Кристальная Шахта 2.0</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --gold:#e8a33d;
+    --gold-bright:#ffc766;
+    --stone-panel:#1c1410;
+    --text:#f2e6d0;
+    --text-dim:#a8998a;
+    --common:#9aa3ad;    --common2:#d7dce2;
+    --rare:#3d8bfd;      --rare2:#a8ccff;
+    --epic:#b054f2;      --epic2:#e6c2ff;
+    --legendary:#f2a93c; --legendary2:#ffe1a3;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent; user-select:none;}
+  html,body{
+    margin:0; padding:0; height:100%; overflow:hidden;
+    background:radial-gradient(ellipse at 50% 0%, #1a1024, #0d0812);
+    transition:background 0.7s ease;
+    font-family:'Georgia','Times New Roman',serif;
+    color:var(--text);
+  }
+  #app{ display:flex; flex-direction:column; height:100%; position:relative; }
+
+  /* PORTAL TRANSITION OVERLAY */
+  #portal{
+    position:fixed; inset:0; z-index:45; pointer-events:none; opacity:0;
+    background:radial-gradient(circle at var(--px,50%) var(--py,50%), var(--portal-color,#fff) 0%, transparent 65%);
+  }
+  #portal.active{ animation: portalExpand 0.9s cubic-bezier(.16,.84,.44,1) forwards; }
+  @keyframes portalExpand{
+    0%{ clip-path: circle(0% at var(--px) var(--py)); opacity:.95; }
+    60%{ opacity:.85; }
+    100%{ clip-path: circle(145% at var(--px) var(--py)); opacity:0; }
+  }
+
+  /* HEADER */
+  header{ position:relative; padding:12px 16px 10px; text-align:center; flex-shrink:0; }
+  .icon-btn{
+    position:absolute; top:8px; right:12px;
+    background:rgba(255,255,255,0.08); border:none; border-radius:50%;
+    width:34px; height:34px; font-size:1rem; color:var(--text);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .loc-label{ font-family:'Cinzel',Georgia,serif; font-weight:600; font-size:0.78rem; color:var(--text-dim); letter-spacing:0.4px; }
+  .loc-tagline{ font-family:system-ui,sans-serif; font-style:italic; font-size:0.68rem; color:var(--text-dim); opacity:.8; margin-top:2px; }
+  .resource-panel{
+    display:inline-block; margin-top:8px; padding:6px 20px 8px; border-radius:16px;
+    background:linear-gradient(160deg, rgba(255,255,255,.06), rgba(0,0,0,.15));
+    border:1px solid rgba(255,199,102,0.25);
+    box-shadow:0 0 20px rgba(232,163,61,0.12) inset;
+  }
+  .resource-counter{ font-family:'Cinzel',Georgia,serif; font-size:1.9rem; font-weight:700; color:var(--gold-bright); text-shadow:0 0 20px rgba(232,163,61,0.5); letter-spacing:0.5px; }
+  .resource-counter span.unit{ font-size:1.05rem; color:var(--text-dim); font-weight:normal; }
+  .per-sec{ font-size:0.82rem; color:#b4a8ff; margin-top:1px; font-family:system-ui,sans-serif; }
+
+  /* TOAST */
+  #toast{
+    position:fixed; top:10px; left:50%; transform:translateX(-50%) translateY(-30px);
+    background:rgba(10,8,6,0.92); border:1px solid rgba(255,199,102,0.25);
+    color:var(--text); padding:9px 16px; border-radius:12px;
+    font-family:system-ui,sans-serif; font-size:0.82rem; font-weight:600;
+    opacity:0; transition:all 0.35s ease; pointer-events:none; white-space:nowrap; z-index:50;
+  }
+  #toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
+
+  /* MAIN */
+  main{ flex:1; display:flex; align-items:center; justify-content:center; position:relative; min-height:0; }
+  .ambient-particle{ position:absolute; border-radius:50%; pointer-events:none; z-index:0; animation:ambientFloat linear forwards; }
+  @keyframes ambientFloat{
+    0%{ transform:translateY(10px) scale(0.7); opacity:0; }
+    15%{ opacity:.9; }
+    85%{ opacity:.5; }
+    100%{ transform:translateY(-130px) scale(0.4); opacity:0; }
+  }
+
+  #rock-wrap{
+    --accent:#8b7cf0; --accent2:#b4a8ff; --rockBase:#3a2f4a; --rockDeep:#1f1826;
+    position:relative; perspective:900px;
+    width:min(66vw, 250px); height:min(66vw, 250px);
+    cursor:pointer; touch-action:manipulation;
+  }
+  #rock-wrap::before{
+    content:""; position:absolute; inset:-7%; border-radius:50%; z-index:0; pointer-events:none;
+    border:2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+    box-shadow:0 0 0 6px color-mix(in srgb, var(--accent) 12%, transparent) inset;
+    transition:border-color .6s ease, box-shadow .6s ease;
+  }
+  #rock-glow{
+    position:absolute; inset:-25%; border-radius:50%;
+    background:radial-gradient(circle, var(--accent) 0%, transparent 68%);
+    opacity:0.35; filter:blur(18px); z-index:0; pointer-events:none;
+    animation:glowPulse 3s ease-in-out infinite;
+  }
+  @keyframes glowPulse{ 0%,100%{opacity:0.22; transform:scale(0.94);} 50%{opacity:0.42; transform:scale(1.05);} }
+  #rock{ position:relative; z-index:1; width:100%; height:100%; transition:transform 0.08s ease; }
+  #rock-wrap:active #rock{ transform:scale(0.93); }
+  #rock-wrap.shake #rock{ animation:shake 0.25s; }
+  @keyframes shake{ 0%,100%{transform:translate(0,0);} 25%{transform:translate(-3px,2px) rotate(-1deg);} 75%{transform:translate(3px,-2px) rotate(1deg);} }
+  #rock-wrap.flipping #rock{ animation:rockFlip 0.56s ease-in-out; }
+  @keyframes rockFlip{ 0%{transform:rotateY(0deg);} 50%{transform:rotateY(92deg);} 100%{transform:rotateY(0deg);} }
+  .crystal{ animation:crystalPulse 2.4s ease-in-out infinite; transform-origin:center; }
+  .crystal:nth-of-type(2){ animation-delay:0.3s; }
+  .crystal:nth-of-type(3){ animation-delay:0.6s; }
+  .crystal:nth-of-type(4){ animation-delay:0.9s; }
+  @keyframes crystalPulse{ 0%,100%{opacity:0.82;} 50%{opacity:1;} }
+  .sparkle{ animation:twinkle 1.8s ease-in-out infinite; transform-origin:center; }
+  @keyframes twinkle{ 0%,100%{opacity:0; transform:scale(0.4);} 50%{opacity:1; transform:scale(1);} }
+
+  .float-num{
+    position:absolute; font-size:1.3rem; font-weight:bold; color:var(--gold-bright);
+    text-shadow:0 1px 3px rgba(0,0,0,0.6); pointer-events:none;
+    animation:floatUp 0.9s ease-out forwards; font-family:system-ui,sans-serif; z-index:5;
+  }
+  @keyframes floatUp{ 0%{opacity:1; transform:translateY(0) scale(1);} 100%{opacity:0; transform:translateY(-70px) scale(1.2);} }
+
+  .chip{ position:absolute; width:7px; height:7px; border-radius:2px; pointer-events:none; z-index:5; animation:flyOut 0.6s ease-out forwards; }
+  @keyframes flyOut{ 0%{transform:translate(0,0) rotate(0deg); opacity:1;} 100%{transform:translate(var(--dx),var(--dy)) rotate(var(--rot)); opacity:0;} }
+
+  /* NAV */
+  nav{ display:flex; flex-shrink:0; border-top:1px solid rgba(255,255,255,0.08); background:rgba(0,0,0,0.2); }
+  nav button{ flex:1; padding:11px 4px; background:none; border:none; color:var(--text-dim); font-family:system-ui,sans-serif; font-size:0.78rem; font-weight:600; letter-spacing:0.2px; border-bottom:3px solid transparent; }
+  nav button.active{ color:var(--gold-bright); border-bottom-color:var(--gold); text-shadow:0 0 8px rgba(255,199,102,0.35); }
+
+  /* PANEL */
+  #panel{ flex-shrink:0; height:40vh; max-height:340px; overflow-y:auto; padding:10px 12px calc(10px + env(safe-area-inset-bottom)); background:var(--stone-panel); }
+
+  /* CARDS */
+  .card{
+    --r:var(--common); --r2:var(--common2);
+    position:relative; overflow:hidden;
+    background:linear-gradient(160deg, color-mix(in srgb, var(--r) 10%, var(--stone-panel)), var(--stone-panel));
+    border:1.5px solid color-mix(in srgb, var(--r) 55%, transparent);
+    border-radius:14px; padding:12px 13px; margin-bottom:10px;
+    font-family:system-ui,sans-serif;
+    box-shadow:0 0 0 1px rgba(0,0,0,0.3) inset, 0 2px 10px rgba(0,0,0,0.35);
+    transition:opacity .15s, transform .1s, box-shadow .3s;
+  }
+  .card.disabled{ opacity:.55; }
+  .card:active{ transform:scale(0.985); }
+  @media (hover:hover){ .card:not(.disabled):hover{ transform:translateY(-2px); box-shadow:0 4px 14px rgba(0,0,0,0.4); } }
+
+  .card.rarity-common{ --r:var(--common); --r2:var(--common2); }
+  .card.rarity-rare{ --r:var(--rare); --r2:var(--rare2); }
+  .card.rarity-epic{ --r:var(--epic); --r2:var(--epic2); }
+  .card.rarity-legendary{ --r:var(--legendary); --r2:var(--legendary2); animation:legendaryPulse 2.6s ease-in-out infinite; }
+  @keyframes legendaryPulse{
+    0%,100%{ box-shadow:0 0 10px 1px color-mix(in srgb, var(--legendary) 45%, transparent), 0 2px 10px rgba(0,0,0,.35); }
+    50%{ box-shadow:0 0 20px 5px color-mix(in srgb, var(--legendary) 65%, transparent), 0 2px 10px rgba(0,0,0,.35); }
+  }
+
+  .card-shine{
+    position:absolute; top:-60%; left:-70%; width:35%; height:220%;
+    background:linear-gradient(120deg, transparent 0%, rgba(255,255,255,0.38) 45%, transparent 100%);
+    transform:rotate(18deg); pointer-events:none;
+  }
+  .card.rarity-epic .card-shine{ animation:shineSweep 3.4s ease-in-out infinite; }
+  .card.rarity-legendary .card-shine{
+    animation:shineSweep 2.1s ease-in-out infinite;
+    background:linear-gradient(120deg, transparent 0%, rgba(255,232,170,0.55) 45%, transparent 100%);
+  }
+  .card.rarity-rare .card-shine{ opacity:0; transition:opacity .2s; }
+  .card.rarity-rare:active .card-shine{ opacity:1; animation:shineSweep 0.9s ease-out; }
+  @media (hover:hover){ .card.rarity-rare:hover .card-shine{ opacity:1; animation:shineSweep 0.9s ease-out; } }
+  @keyframes shineSweep{ 0%{left:-70%;} 60%{left:120%;} 100%{left:120%;} }
+
+  .card-top{ display:flex; align-items:center; gap:10px; margin-bottom:7px; position:relative; z-index:1; }
+  .card-icon{
+    width:42px; height:42px; border-radius:10px; flex-shrink:0;
+    display:flex; align-items:center; justify-content:center; font-size:1.4rem;
+    background:radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--r) 55%, white 15%), color-mix(in srgb, var(--r) 55%, black 15%));
+    box-shadow:0 0 10px color-mix(in srgb, var(--r) 50%, transparent);
+  }
+  .card-head{ min-width:0; flex:1; }
+  .card-name{ font-family:'Cinzel',Georgia,serif; font-weight:700; font-size:0.94rem; color:var(--text); letter-spacing:.2px; }
+  .card-rarity-pill{
+    display:inline-block; margin-top:3px; font-size:0.63rem; font-weight:700; letter-spacing:.3px;
+    padding:2px 8px; border-radius:20px; color:#1a1206;
+    background:linear-gradient(90deg,var(--r),var(--r2));
+  }
+  .card-flavor{ font-style:italic; font-size:0.72rem; color:var(--text-dim); margin-bottom:6px; position:relative; z-index:1; }
+  .card-desc{ font-size:0.79rem; color:var(--text); opacity:.92; margin-bottom:8px; position:relative; z-index:1; }
+  .card-footer{ display:flex; align-items:center; justify-content:space-between; gap:8px; position:relative; z-index:1; }
+  .card-level{ font-size:0.72rem; color:var(--text-dim); display:flex; align-items:center; gap:6px; }
+  .level-pips{ color:var(--r2); letter-spacing:1px; font-size:0.7rem; }
+  .card-buy{
+    flex-shrink:0; border:none; border-radius:9px; padding:9px 14px; font-weight:700; font-size:0.82rem;
+    color:#241505; background:linear-gradient(180deg,var(--r2),var(--r)); font-family:system-ui,sans-serif;
+    cursor:pointer; box-shadow:0 2px 0 rgba(0,0,0,0.25);
+  }
+  .card-buy:focus-visible{ outline:2px solid var(--gold-bright); outline-offset:2px; }
+  .card.disabled .card-buy{ background:#3a3028; color:var(--text-dim); box-shadow:none; }
+  .card-buy:disabled{ background:#3a3028; color:var(--text-dim); box-shadow:none; cursor:default; opacity:.85; }
+
+  .loc-progress{ height:7px; background:rgba(255,255,255,0.08); border-radius:4px; overflow:hidden; margin:6px 0 2px; }
+  .loc-progress-fill{ height:100%; background:linear-gradient(90deg,var(--r),var(--r2)); box-shadow:0 0 8px color-mix(in srgb, var(--r2) 70%, transparent); transition:width .3s ease; }
+
+  @media (prefers-reduced-motion: reduce){
+    #portal.active{ animation:none; opacity:.5; transition:opacity .25s ease; }
+    #rock-wrap.flipping #rock{ animation:none; }
+    .card.rarity-legendary{ animation:none; }
+    .card-shine{ display:none; }
+    .ambient-particle{ display:none; }
+    #rock-glow{ animation:none; }
+    .crystal{ animation:none; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="portal"></div>
+  <div id="toast"></div>
+  <header>
+    <button class="icon-btn" id="mute-btn" aria-label="Звук">🔊</button>
+    <div class="loc-label" id="loc-label">📍 Пещера кристаллов</div>
+    <div class="loc-tagline" id="loc-tagline">«Здесь всё начиналось»</div>
+    <div class="resource-panel">
+      <div class="resource-counter"><span id="resource-amount">0</span> <span class="unit" id="resource-icon">💎</span></div>
+      <div class="per-sec" id="per-sec">0 в секунду</div>
+    </div>
+  </header>
+
+  <main>
+    <div id="rock-wrap">
+      <div id="rock-glow"></div>
+      <svg id="rock" viewBox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <radialGradient id="rockGrad" cx="38%" cy="30%" r="80%">
+            <stop offset="0%" style="stop-color:var(--rockBase)"/>
+            <stop offset="100%" style="stop-color:var(--rockDeep)"/>
+          </radialGradient>
+          <linearGradient id="crystalGradA" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" style="stop-color:var(--accent2)"/>
+            <stop offset="100%" style="stop-color:var(--accent)"/>
+          </linearGradient>
+          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="3" result="blur"/>
+            <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+        <polygon points="100,10 150,28 180,70 190,120 160,168 108,192 55,182 18,140 12,85 35,42 68,18" fill="url(#rockGrad)" stroke="#0d0a08" stroke-width="3"/>
+        <polygon points="100,10 150,28 180,70 140,90 90,60 68,18" fill="#000" opacity="0.15"/>
+        <polygon class="crystal" points="75,55 118,68 108,112 68,102" fill="url(#crystalGradA)" filter="url(#glow)"/>
+        <polygon class="crystal" points="105,100 148,118 135,155 98,145" fill="url(#crystalGradA)" filter="url(#glow)" opacity="0.9"/>
+        <polygon class="crystal" points="45,110 78,122 68,155 38,145" fill="url(#crystalGradA)" filter="url(#glow)" opacity="0.85"/>
+        <polygon class="crystal" points="118,45 140,55 130,80 110,72" fill="url(#crystalGradA)" filter="url(#glow)" opacity="0.75"/>
+        <circle class="sparkle" cx="95" cy="80" r="3" style="fill:var(--accent2); animation-delay:0s"/>
+        <circle class="sparkle" cx="130" cy="130" r="2.5" style="fill:var(--accent2); animation-delay:0.4s"/>
+        <circle class="sparkle" cx="60" cy="130" r="2" style="fill:var(--accent2); animation-delay:0.8s"/>
+        <circle class="sparkle" cx="140" cy="65" r="2" style="fill:var(--accent2); animation-delay:1.2s"/>
+        <circle class="sparkle" cx="80" cy="150" r="2.5" style="fill:var(--accent2); animation-delay:0.2s"/>
+      </svg>
+    </div>
+  </main>
+
+  <nav>
+    <button class="tab-btn active" data-tab="click">⛏ Кирка</button>
+    <button class="tab-btn" data-tab="auto">⚙ Карты майнеров</button>
+    <button class="tab-btn" data-tab="loc">🗺 Локации</button>
+  </nav>
+
+  <div id="panel"></div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  const SAVE_KEY = "crystal_mine_v2_save";
+  let state = {
+    resources: 0,
+    totalEarned: 0,
+    clickLevel: 0,
+    autoMiners: [0,0,0,0],
+    currentLocation: 0,
+    muted: false,
+  };
+
+  const clickUpgrade = {
+    name:"Верная кирка", icon:"⛏", baseCost:15, costMult:1.15, baseValue:1,
+    flavor:"Растёт вместе с тобой"
+  };
+
+  const autoDefs = [
+    { name:"Ученик рудокоп",   icon:"🧑‍🔧", baseCost:25,   costMult:1.16, rate:0.3, rarity:"common",    flavor:"Только выучил, где держать кирку" },
+    { name:"Кирка-автомат",    icon:"🤖",   baseCost:150,  costMult:1.17, rate:2,   rarity:"rare",      flavor:"Механизм гномьей ковки" },
+    { name:"Буровая установка",icon:"🛠",   baseCost:900,  costMult:1.18, rate:9,   rarity:"epic",      flavor:"Пробивает камень будто масло" },
+    { name:"Древний голем",    icon:"🗿",   baseCost:5000, costMult:1.2,  rate:40,  rarity:"legendary", flavor:"Спит тысячу лет между ударами" },
+  ];
+
+  const LOCATIONS = [
+    { id:"cave",  name:"Пещера кристаллов", icon:"💎", tagline:"Здесь всё начиналось",  unlockAt:0,       bg:["#1a1024","#0d0812"], accent:"#8b7cf0", accent2:"#b4a8ff", rockBase:"#3a2f4a", rockDeep:"#1f1826" },
+    { id:"gold",  name:"Золотая шахта",     icon:"🪙", tagline:"Блеск, который не ржавеет", unlockAt:1000,    bg:["#241a0c","#120c05"], accent:"#e8a33d", accent2:"#ffd98a", rockBase:"#4a3a22", rockDeep:"#251c10" },
+    { id:"ice",   name:"Ледяная пещера",    icon:"❄️", tagline:"Холод, который жжётся",  unlockAt:20000,   bg:["#0c1c24","#050e12"], accent:"#3fb8d4", accent2:"#c8f4ff", rockBase:"#22404a", rockDeep:"#102026" },
+    { id:"lava",  name:"Огненные недра",    icon:"🔥", tagline:"Осторожно, здесь жарко", unlockAt:250000,  bg:["#240c0c","#120505"], accent:"#e8552f", accent2:"#ffb47a", rockBase:"#4a2218", rockDeep:"#26100c" },
+    { id:"space", name:"Звёздный астероид", icon:"✨", tagline:"Дальше только звёзды",   unlockAt:3000000, bg:["#100c24","#050512"], accent:"#a862e8", accent2:"#ffd6fb", rockBase:"#2a2244", rockDeep:"#141026" },
+  ];
+
+  const RARITY = {
+    common:    { label:"Обычная",    icon:"●" },
+    rare:      { label:"Редкая",     icon:"◆" },
+    epic:      { label:"Эпическая",  icon:"★" },
+    legendary: { label:"Легендарная",icon:"👑" },
+  };
+
+  function toolRarity(level){
+    if(level>=50) return "legendary";
+    if(level>=25) return "epic";
+    if(level>=10) return "rare";
+    return "common";
+  }
+
+  function load(){
+    try{
+      const raw = localStorage.getItem(SAVE_KEY);
+      if(raw) state = Object.assign(state, JSON.parse(raw));
+    }catch(e){}
+    if(!LOCATIONS[state.currentLocation] || state.totalEarned < LOCATIONS[state.currentLocation].unlockAt){
+      state.currentLocation = 0;
+    }
+  }
+  function save(){ try{ localStorage.setItem(SAVE_KEY, JSON.stringify(state)); }catch(e){} }
+
+  function costFor(base, mult, level){ return Math.ceil(base * Math.pow(mult, level)); }
+  function unlockedCount(){ return LOCATIONS.filter(l=> state.totalEarned >= l.unlockAt).length; }
+  function locationBonusMult(){ return 1 + 0.15*(unlockedCount()-1); }
+  function clickPower(){ return (1 + state.clickLevel*clickUpgrade.baseValue) * locationBonusMult(); }
+  function perSecond(){
+    let total=0;
+    autoDefs.forEach((d,i)=> total += d.rate*state.autoMiners[i]);
+    return total * locationBonusMult();
+  }
+
+  function fmt(n){
+    n = Math.floor(n);
+    if(n < 1000) return String(n);
+    if(n < 1e6) return (n/1e3).toFixed(2).replace(/\.00$/,'') + "K";
+    if(n < 1e9) return (n/1e6).toFixed(2).replace(/\.00$/,'') + "M";
+    return (n/1e9).toFixed(2).replace(/\.00$/,'') + "B";
+  }
+  function fmtPrecise(n){
+    if(n < 1000){ const r = Math.round(n*10)/10; return (r%1===0) ? String(r) : r.toFixed(1); }
+    return fmt(n);
+  }
+  function pips(level){
+    const filled = Math.min(level,5);
+    let s = "●".repeat(filled) + "○".repeat(Math.max(0,5-filled));
+    if(level>5) s += " +"+(level-5);
+    return s;
+  }
+
+  // ---------- AUDIO ----------
+  let audioCtx = null;
+  function getCtx(){
+    if(!audioCtx){ audioCtx = new (window.AudioContext || window.webkitAudioContext)(); }
+    if(audioCtx.state === "suspended") audioCtx.resume();
+    return audioCtx;
+  }
+  function tone(freq, start, dur, type, peak){
+    if(state.muted) return;
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime+start);
+    gain.gain.setValueAtTime(0, ctx.currentTime+start);
+    gain.gain.linearRampToValueAtTime(peak, ctx.currentTime+start+0.008);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+start+dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime+start);
+    osc.stop(ctx.currentTime+start+dur+0.03);
+  }
+  function sweep(freqStart, freqEnd, start, dur, type, peak){
+    if(state.muted) return;
+    const ctx = getCtx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freqStart, ctx.currentTime+start);
+    osc.frequency.exponentialRampToValueAtTime(freqEnd, ctx.currentTime+start+dur);
+    gain.gain.setValueAtTime(0, ctx.currentTime+start);
+    gain.gain.linearRampToValueAtTime(peak, ctx.currentTime+start+0.03);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime+start+dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(ctx.currentTime+start);
+    osc.stop(ctx.currentTime+start+dur+0.03);
+  }
+  function playClick(){
+    const f = 680+Math.random()*220;
+    tone(f,0,0.09,'triangle',0.12);
+    tone(f*1.5,0.01,0.07,'sine',0.05);
+    if(Math.random()<0.12) tone(f*2.4,0.015,0.05,'sine',0.03);
+  }
+  function playBuy(rarity){
+    const seqs = {
+      common:    [[520,0,0.11,'square',0.08]],
+      rare:      [[520,0,0.1,'square',0.07],[720,0.08,0.14,'square',0.08]],
+      epic:      [[494,0,0.1,'square',0.07],[622,0.08,0.1,'square',0.07],[784,0.16,0.18,'square',0.09]],
+      legendary: [[392,0,0.12,'sine',0.09],[494,0.09,0.12,'sine',0.09],[588,0.18,0.12,'sine',0.09],[784,0.27,0.16,'sine',0.1],[988,0.36,0.28,'sine',0.11]],
+    };
+    const seq = seqs[rarity] || seqs.common;
+    seq.forEach(t=> tone(t[0],t[1],t[2],t[3],t[4]));
+    if(rarity==='legendary') tone(1976,0.4,0.4,'sine',0.05);
+  }
+  function playTravel(){
+    sweep(260,720,0,0.55,'sawtooth',0.05);
+    tone(880,0.5,0.25,'sine',0.07);
+  }
+  function playUnlock(){
+    [440,554,659,880,1108].forEach((f,i)=> tone(f, i*0.08, 0.24, 'sine', 0.1));
+  }
+  document.addEventListener("visibilitychange", ()=>{
+    if(!audioCtx) return;
+    if(document.hidden) audioCtx.suspend(); else audioCtx.resume();
+  });
+
+  // ---------- DOM ----------
+  const resourceEl = document.getElementById("resource-amount");
+  const resourceIconEl = document.getElementById("resource-icon");
+  const perSecEl = document.getElementById("per-sec");
+  const locLabelEl = document.getElementById("loc-label");
+  const locTaglineEl = document.getElementById("loc-tagline");
+  const rockWrap = document.getElementById("rock-wrap");
+  const mainEl = document.querySelector("main");
+  const panel = document.getElementById("panel");
+  const tabBtns = document.querySelectorAll(".tab-btn");
+  const muteBtn = document.getElementById("mute-btn");
+  const toastEl = document.getElementById("toast");
+  const portalEl = document.getElementById("portal");
+  let activeTab = "click";
+  let toastTimer = null;
+  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function showToast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(()=> toastEl.classList.remove("show"), 3000);
+  }
+
+  function applyLocationVisual(){
+    const loc = LOCATIONS[state.currentLocation];
+    rockWrap.style.setProperty("--accent", loc.accent);
+    rockWrap.style.setProperty("--accent2", loc.accent2);
+    rockWrap.style.setProperty("--rockBase", loc.rockBase);
+    rockWrap.style.setProperty("--rockDeep", loc.rockDeep);
+    document.body.style.background = `radial-gradient(ellipse at 50% 0%, ${loc.bg[0]}, ${loc.bg[1]})`;
+    locLabelEl.textContent = "📍 " + loc.name;
+    locTaglineEl.textContent = "«" + loc.tagline + "»";
+    resourceIconEl.textContent = loc.icon;
+  }
+
+  function updateHeader(){
+    resourceEl.textContent = fmt(state.resources);
+    const ps = perSecond();
+    perSecEl.textContent = ps > 0 ? `${fmtPrecise(ps)} в секунду` : "Купи карту майнера!";
+    muteBtn.textContent = state.muted ? "🔇" : "🔊";
+  }
+
+  let seenUnlockedCount = 1;
+  function checkNewUnlocks(){
+    const count = unlockedCount();
+    if(count > seenUnlockedCount){
+      for(let i=seenUnlockedCount; i<count; i++){
+        showToast("🎉 Открыта локация: " + LOCATIONS[i].name + "!");
+      }
+      playUnlock();
+      seenUnlockedCount = count;
+      if(activeTab === "loc") renderPanel();
+    }
+  }
+
+  function onEarn(amount){
+    state.resources += amount;
+    state.totalEarned += amount;
+    checkNewUnlocks();
+    updateHeader();
+  }
+
+  // ---------- CARDS ----------
+  function buildMinerCard({icon,name,flavor,desc,levelLabel,level,cost,canAfford,rarity,onBuy}){
+    const r = RARITY[rarity];
+    const div = document.createElement("div");
+    div.className = "card rarity-" + rarity + (canAfford ? "" : " disabled");
+    div.innerHTML = `
+      <div class="card-shine"></div>
+      <div class="card-top">
+        <div class="card-icon">${icon}</div>
+        <div class="card-head">
+          <div class="card-name">${name}</div>
+          <div class="card-rarity-pill">${r.icon} ${r.label}</div>
+        </div>
+      </div>
+      <div class="card-flavor">«${flavor}»</div>
+      <div class="card-desc">${desc}</div>
+      <div class="card-footer">
+        <span class="card-level">${levelLabel} <span class="level-pips">${pips(level)}</span></span>
+      </div>`;
+    const footer = div.querySelector(".card-footer");
+    const btn = document.createElement("button");
+    btn.className = "card-buy";
+    btn.type = "button";
+    btn.innerHTML = `${fmt(cost)} 💎`;
+    btn.addEventListener("click", ()=> onBuy(div));
+    footer.appendChild(btn);
+    return div;
+  }
+
+  function buildLocationCard(loc, index){
+    const unlocked = state.totalEarned >= loc.unlockAt;
+    const isCurrent = state.currentLocation === index;
+    const div = document.createElement("div");
+    div.className = "card location" + (unlocked ? "" : " disabled");
+    div.style.setProperty("--r", loc.accent);
+    div.style.setProperty("--r2", loc.accent2);
+
+    let bodyHtml;
+    if(!unlocked){
+      const pct = Math.min(100, Math.floor(state.totalEarned/loc.unlockAt*100));
+      bodyHtml = `
+        <div class="card-desc">Нужно добыть ${fmt(loc.unlockAt)} 💎 (у тебя ${fmt(state.totalEarned)})</div>
+        <div class="loc-progress"><div class="loc-progress-fill" style="width:${pct}%"></div></div>`;
+    } else {
+      const desc = index===0 ? "Стартовая локация" : "Постоянный бонус к добыче: +15%";
+      bodyHtml = `<div class="card-desc">${desc}</div>`;
+    }
+
+    div.innerHTML = `
+      <div class="card-shine"></div>
+      <div class="card-top">
+        <div class="card-icon">${loc.icon}</div>
+        <div class="card-head">
+          <div class="card-name">${loc.name}</div>
+          <div class="card-rarity-pill">${isCurrent ? "📍 Ты здесь" : unlocked ? "Открыто" : "🔒 Закрыто"}</div>
+        </div>
+      </div>
+      <div class="card-flavor">«${loc.tagline}»</div>
+      ${bodyHtml}
+      <div class="card-footer"></div>`;
+
+    const footer = div.querySelector(".card-footer");
+    const btn = document.createElement("button");
+    btn.className = "card-buy";
+    btn.type = "button";
+    if(!unlocked){ btn.textContent = "🔒"; btn.disabled = true; }
+    else if(isCurrent){ btn.textContent = "✅ Здесь"; btn.disabled = true; }
+    else {
+      btn.textContent = "Перейти";
+      btn.addEventListener("click", ()=> travelTo(index));
+    }
+    footer.appendChild(btn);
+    return div;
+  }
+
+  function renderClickTab(){
+    const level = state.clickLevel;
+    const cost = costFor(clickUpgrade.baseCost, clickUpgrade.costMult, level);
+    const rarity = toolRarity(level);
+    panel.appendChild(buildMinerCard({
+      icon: clickUpgrade.icon, name: clickUpgrade.name, flavor: clickUpgrade.flavor,
+      desc: `Сила клика: ${fmtPrecise(clickPower())} 💎 за удар`,
+      levelLabel: `Уровень ${level}`, level, cost, canAfford: state.resources >= cost, rarity,
+      onBuy: (cardEl)=>{
+        if(state.resources >= cost){
+          state.resources -= cost; state.clickLevel++;
+          const newRarity = toolRarity(state.clickLevel);
+          playBuy(newRarity);
+          celebrateBuy(cardEl, newRarity);
+          save(); renderPanel(); updateHeader();
+        }
+      }
+    }));
+  }
+
+  function renderAutoTab(){
+    autoDefs.forEach((def,i)=>{
+      const level = state.autoMiners[i];
+      const cost = costFor(def.baseCost, def.costMult, level);
+      panel.appendChild(buildMinerCard({
+        icon: def.icon, name: def.name, flavor: def.flavor,
+        desc: `+${fmtPrecise(def.rate)} 💎/сек за штуку`,
+        levelLabel: `Куплено: ${level}`, level, cost, canAfford: state.resources >= cost, rarity: def.rarity,
+        onBuy: (cardEl)=>{
+          if(state.resources >= cost){
+            state.resources -= cost; state.autoMiners[i]++;
+            playBuy(def.rarity);
+            celebrateBuy(cardEl, def.rarity);
+            save(); renderPanel(); updateHeader();
+          }
+        }
+      }));
+    });
+  }
+
+  function renderLocTab(){
+    LOCATIONS.forEach((loc,i)=> panel.appendChild(buildLocationCard(loc,i)));
+  }
+
+  function renderPanel(){
+    panel.innerHTML = "";
+    if(activeTab === "click") renderClickTab();
+    else if(activeTab === "auto") renderAutoTab();
+    else renderLocTab();
+  }
+
+  // ---------- PARTICLES ----------
+  function spawnFloatNum(x,y,amount){
+    const el = document.createElement("div");
+    el.className = "float-num";
+    el.textContent = "+" + fmtPrecise(amount);
+    el.style.left = x+"px"; el.style.top = y+"px";
+    rockWrap.appendChild(el);
+    setTimeout(()=> el.remove(), 900);
+  }
+  function spawnChips(x,y,color){
+    for(let i=0;i<6;i++){
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      const angle = Math.random()*Math.PI*2;
+      const dist = 30+Math.random()*35;
+      chip.style.setProperty("--dx", Math.cos(angle)*dist+"px");
+      chip.style.setProperty("--dy", Math.sin(angle)*dist+"px");
+      chip.style.setProperty("--rot", (Math.random()*360)+"deg");
+      chip.style.left = x+"px"; chip.style.top = y+"px";
+      chip.style.background = color;
+      rockWrap.appendChild(chip);
+      setTimeout(()=> chip.remove(), 650);
+    }
+  }
+  function burstAtViewportPoint(cx,cy,color,count){
+    for(let i=0;i<count;i++){
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.style.position = "fixed";
+      const angle = Math.random()*Math.PI*2;
+      const dist = 20+Math.random()*70;
+      chip.style.setProperty("--dx", Math.cos(angle)*dist+"px");
+      chip.style.setProperty("--dy", Math.sin(angle)*dist+"px");
+      chip.style.setProperty("--rot", (Math.random()*360)+"deg");
+      chip.style.left = cx+"px"; chip.style.top = cy+"px";
+      chip.style.background = color;
+      chip.style.zIndex = 46;
+      document.body.appendChild(chip);
+      setTimeout(()=> chip.remove(), 650);
+    }
+  }
+  function celebrateBuy(cardEl, rarity){
+    if(reducedMotion) return;
+    if(rarity!=="epic" && rarity!=="legendary") return;
+    const rect = cardEl.getBoundingClientRect();
+    const color = rarity==="legendary" ? "var(--legendary2)" : "var(--epic2)";
+    const count = rarity==="legendary" ? 14 : 8;
+    burstAtViewportPoint(rect.left+40, rect.top+rect.height/2, color, count);
+  }
+
+  let ambientTimer = null;
+  function spawnAmbient(){
+    const loc = LOCATIONS[state.currentLocation];
+    const p = document.createElement("div");
+    p.className = "ambient-particle";
+    const size = (2+Math.random()*3).toFixed(1);
+    p.style.width = p.style.height = size+"px";
+    p.style.left = (8+Math.random()*84)+"%";
+    p.style.top = (15+Math.random()*75)+"%";
+    p.style.background = loc.accent2;
+    p.style.boxShadow = `0 0 ${size*2}px ${loc.accent2}`;
+    const dur = (3+Math.random()*2.4);
+    p.style.animationDuration = dur.toFixed(2)+"s";
+    mainEl.appendChild(p);
+    setTimeout(()=> p.remove(), dur*1000+200);
+  }
+  function startAmbient(){
+    if(reducedMotion) return;
+    ambientTimer = setInterval(()=>{ if(!document.hidden) spawnAmbient(); }, 750);
+  }
+
+  // ---------- LOCATION TRAVEL ----------
+  function travelTo(index){
+    if(index === state.currentLocation) return;
+    const loc = LOCATIONS[index];
+    const rect = rockWrap.getBoundingClientRect();
+    const px = ((rect.left+rect.width/2)/window.innerWidth*100).toFixed(1)+"%";
+    const py = ((rect.top+rect.height/2)/window.innerHeight*100).toFixed(1)+"%";
+    portalEl.style.setProperty("--px", px);
+    portalEl.style.setProperty("--py", py);
+    portalEl.style.setProperty("--portal-color", loc.accent);
+    portalEl.classList.remove("active");
+    void portalEl.offsetWidth;
+    portalEl.classList.add("active");
+
+    playTravel();
+    if(!reducedMotion) rockWrap.classList.add("flipping");
+
+    const flipDelay = reducedMotion ? 60 : 280;
+    setTimeout(()=>{
+      state.currentLocation = index;
+      applyLocationVisual();
+      updateHeader();
+      const r2 = LOCATIONS[index].accent2;
+      const cx = rect.left+rect.width/2, cy = rect.top+rect.height/2;
+      burstAtViewportPoint(cx, cy, r2, reducedMotion ? 6 : 16);
+    }, flipDelay);
+
+    setTimeout(()=>{
+      rockWrap.classList.remove("flipping");
+      portalEl.classList.remove("active");
+      save();
+      renderPanel();
+    }, reducedMotion ? 260 : 920);
+  }
+
+  rockWrap.addEventListener("click", (e)=>{
+    const power = clickPower();
+    onEarn(power);
+    if(activeTab === "click") renderPanel();
+
+    const rect = rockWrap.getBoundingClientRect();
+    const x = (e.clientX ?? rect.left+rect.width/2) - rect.left;
+    const y = (e.clientY ?? rect.top+rect.height/2) - rect.top;
+    spawnFloatNum(x,y,power);
+    spawnChips(x,y, LOCATIONS[state.currentLocation].accent2);
+    playClick();
+
+    rockWrap.classList.remove("shake");
+    void rockWrap.offsetWidth;
+    rockWrap.classList.add("shake");
+
+    save();
+  });
+
+  muteBtn.addEventListener("click", ()=>{
+    state.muted = !state.muted;
+    if(!state.muted) getCtx();
+    updateHeader(); save();
+  });
+
+  tabBtns.forEach(btn=>{
+    btn.addEventListener("click", ()=>{
+      tabBtns.forEach(b=>b.classList.remove("active"));
+      btn.classList.add("active");
+      activeTab = btn.dataset.tab;
+      renderPanel();
+    });
+  });
+
+  let lastTick = Date.now();
+  setInterval(()=>{
+    const now = Date.now();
+    const dt = (now-lastTick)/1000;
+    lastTick = now;
+    const gain = perSecond()*dt;
+    if(gain > 0) onEarn(gain);
+  }, 200);
+
+  setInterval(save, 5000);
+
+  function applyOfflineProgress(){
+    const tsKey = SAVE_KEY+"_ts";
+    const lastSeen = Number(localStorage.getItem(tsKey) || Date.now());
+    const now = Date.now();
+    const seconds = Math.min((now-lastSeen)/1000, 60*60*4);
+    if(seconds > 5){
+      const gain = perSecond()*seconds;
+      state.resources += gain;
+      state.totalEarned += gain;
+      if(gain >= 1) showToast("Пока тебя не было, добыто +" + fmt(gain) + " 💎");
+    }
+    localStorage.setItem(tsKey, String(now));
+  }
+  window.addEventListener("beforeunload", ()=>{
+    localStorage.setItem(SAVE_KEY+"_ts", String(Date.now()));
+    save();
+  });
+
+  // ---------- INIT ----------
+  load();
+  applyOfflineProgress();
+  seenUnlockedCount = unlockedCount();
+  applyLocationVisual();
+  updateHeader();
+  renderPanel();
+  startAmbient();
+})();
+</script>
+</body>
+</html>
